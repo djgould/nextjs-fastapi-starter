@@ -1,3 +1,5 @@
+# Next.js FastAPI Starter
+
 <p align="center">
   <a href="https://nextjs-fastapi-starter.vercel.app/">
     <img src="https://assets.vercel.com/image/upload/v1588805858/repositories/vercel/logo.png" height="96">
@@ -5,7 +7,7 @@
   </a>
 </p>
 
-<p align="center">Simple Next.j 14 boilerplate that uses <a href="https://fastapi.tiangolo.com/">FastAPI</a> as the API backend.</p>
+<p align="center">Simple Next.js 14 boilerplate that uses <a href="https://fastapi.tiangolo.com/">FastAPI</a> as the API backend.</p>
 
 <br/>
 
@@ -17,9 +19,9 @@ This is a hybrid Next.js 14 + Python template. One great use case of this is to 
 
 The Python/FastAPI server is mapped into to Next.js app under `/api/`.
 
-This is implemented using [`next.config.js` rewrites](https://github.com/digitros/nextjs-fastapi/blob/main/next.config.js) to map any request to `/api/py/:path*` to the FastAPI API, which is hosted in the `/api` folder.
+This is implemented using [`next.config.js` rewrites](https://github.com/digitros/nextjs-fastapi/blob/main/next.config.js) to map any request to `/api/py/:path*` to the FastAPI API, which is hosted in the [`/api`](./api) folder.
 
-Also, the app/api routes are available on the same domain, so you can use NextJs Route Handlers and make requests to `/api/...`.
+Also, the app/api routes are available on the same domain, so you can use Next.js Route Handlers and make requests to `/api/...`.
 
 On localhost, the rewrite will be made to the `127.0.0.1:8000` port, which is where the FastAPI server is running.
 
@@ -62,7 +64,7 @@ yarn
 pnpm install
 ```
 
-Then, run the development server(python dependencies will be installed automatically here):
+Then, run the development server (Python dependencies will be installed automatically here):
 
 ```bash
 npm run dev
@@ -74,7 +76,7 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-The FastApi server will be running on [http://127.0.0.1:8000](http://127.0.0.1:8000) – feel free to change the port in `package.json` (you'll also need to update it in `next.config.js`).
+The FastAPI server will be running on [http://127.0.0.1:8000](http://127.0.0.1:8000) – feel free to change the port in [`package.json`](./package.json) (you'll also need to update it in [`next.config.js`](./next.config.js)).
 
 ## Learn More
 
