@@ -200,14 +200,170 @@ const PubmedResult = ({ result }: { result: any }) => {
   );
 };
 
+const ClinVarResult = ({ result }: { result: any }) => {
+  if (!result.found) {
+    return (
+      <Card className="bg-amber-50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant="secondary">ClinVar</Badge>
+            <span className="text-amber-600">{result.message}</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="bg-amber-50">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Badge variant="secondary">ClinVar</Badge>
+          <span className="text-sm text-gray-600">
+            Found {result.total_results} variant interpretation
+            {result.total_results !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <div className="space-y-4">
+          {result.variants.map((variant: any, index: number) => (
+            <div key={index} className="bg-white rounded-lg p-4 shadow-sm">
+              {/* Header with clinical significance */}
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h4 className="font-medium text-sm">{variant.title}</h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge
+                      variant={
+                        variant.clinical_significance
+                          ?.toLowerCase()
+                          .includes("pathogenic")
+                          ? "destructive"
+                          : variant.clinical_significance
+                              ?.toLowerCase()
+                              .includes("benign")
+                          ? "secondary"
+                          : variant.clinical_significance
+                              ?.toLowerCase()
+                              .includes("uncertain")
+                          ? "outline"
+                          : "default"
+                      }
+                    >
+                      {variant.clinical_significance || "No Classification"}
+                    </Badge>
+                    {variant.is_fda_recognized && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-blue-100 text-blue-800"
+                      >
+                        FDA Recognized
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <HoverCard>
+                  <HoverCardTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-xs">
+                      Details
+                    </Button>
+                  </HoverCardTrigger>
+                  <HoverCardContent side="left" className="w-80">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Review Status</div>
+                      <div className="text-sm">{variant.review_status}</div>
+                      <div className="text-sm font-medium">Last Evaluated</div>
+                      <div className="text-sm">{variant.last_evaluated}</div>
+                      <div className="text-sm font-medium">
+                        Molecular Consequences
+                      </div>
+                      <div className="text-sm">
+                        {variant.molecular_consequences.join(", ")}
+                      </div>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
+              </div>
+
+              {/* Associated conditions */}
+              {variant.associated_conditions?.length > 0 && (
+                <div className="mt-3">
+                  <h5 className="text-sm font-medium text-gray-700 mb-2">
+                    Associated Conditions
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {variant.associated_conditions.map(
+                      (condition: any, idx: number) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {condition.name}
+                        </Badge>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Population frequencies */}
+              {variant.allele_frequencies?.length > 0 && (
+                <div className="mt-3">
+                  <h5 className="text-sm font-medium text-gray-700 mb-2">
+                    Population Frequencies
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {variant.allele_frequencies.map(
+                      (freq: any, idx: number) => (
+                        <div key={idx} className="flex justify-between">
+                          <span className="text-gray-600">
+                            {freq.source.split("(")[0].trim()}:
+                          </span>
+                          <span className="font-mono">
+                            {parseFloat(freq.frequency).toExponential(2)}
+                          </span>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Supporting evidence */}
+              <div className="mt-3 text-xs text-gray-500">
+                <div className="flex items-center gap-2">
+                  <span>Evidence:</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="text-blue-600 hover:underline">
+                        {variant.supporting_submissions.clinical.length}{" "}
+                        clinical submission
+                        {variant.supporting_submissions.clinical.length !== 1
+                          ? "s"
+                          : ""}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="text-xs">
+                          Clinical Variation IDs:
+                          <div className="font-mono mt-1">
+                            {variant.supporting_submissions.clinical.join(", ")}
+                          </div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const GenomeBrowserViewer = ({
   coordinates,
   gene,
-  variants,
 }: {
   coordinates: string;
   gene: string;
-  variants: { position: number; allele: string }[];
 }) => {
   const [showBrowser, setShowBrowser] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "browser">("summary");
@@ -250,21 +406,6 @@ const GenomeBrowserViewer = ({
             <div className="flex items-center text-sm">
               <span className="text-gray-500 w-24">Coordinates:</span>
               <span className="font-mono text-xs">{coordinates}</span>
-            </div>
-            <div className="flex items-start text-sm">
-              <span className="text-gray-500 w-24">Variants:</span>
-              <div className="flex-1">
-                {variants.map((variant, idx) => (
-                  <div
-                    key={idx}
-                    className="font-mono text-xs flex items-center gap-2"
-                  >
-                    <span>pos: {variant.position}</span>
-                    <span>·</span>
-                    <span>{variant.allele}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         ) : (
@@ -452,11 +593,17 @@ export default function Home() {
                 <GenomeBrowserViewer
                   coordinates={msg.result.coordinates}
                   gene={msg.result.gene}
-                  variants={msg.result.variants}
                 />
               </div>
             );
           }
+        }
+        if (msg.tool === "get_clinvar_data") {
+          return (
+            <div className="mb-4 ml-8">
+              <ClinVarResult result={msg.result} />
+            </div>
+          );
         }
         return (
           <div className="mb-4 ml-8">
@@ -551,6 +698,56 @@ export default function Home() {
                 Send
               </Button>
             </form>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setMessage(
+                    "My patient has a VUS in PALB2 (c.1240G>T). Can you help me understand its potential impact on breast cancer risk and find recent publications about this variant?"
+                  )
+                }
+                className="text-xs"
+              >
+                Analyze PALB2 VUS
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setMessage(
+                    "What are the latest clinical trials and research findings on germline PTEN mutations in Cowden syndrome? Particularly interested in cancer surveillance guidelines."
+                  )
+                }
+                className="text-xs"
+              >
+                PTEN & Cowden Research
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setMessage(
+                    "Can you show me the genomic region around the MLH1 gene exon 16? I need to check for common Lynch syndrome variants and nearby splice sites."
+                  )
+                }
+                className="text-xs"
+              >
+                View MLH1 Region
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setMessage(
+                    "What's the current evidence for reclassifying CDH1 c.1137G>A as pathogenic? Please include recent case studies and functional studies."
+                  )
+                }
+                className="text-xs"
+              >
+                CDH1 Classification
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
