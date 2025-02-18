@@ -22,6 +22,12 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 
 type Message = {
   role: string;
@@ -116,313 +122,317 @@ const WebsiteResult = ({ result }: { result: any }) => (
   </Card>
 );
 
-const PubmedResult = ({ result }: { result: any }) => {
+const ToolResult = ({ result, tool }: { result: any; tool: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const getSummary = () => {
+    switch (tool) {
+      case "get_pubmed_studies":
+        return result.studies?.length
+          ? `${result.studies.length} studies found${
+              result.query ? ` for "${result.query}"` : ""
+            }`
+          : "No studies found";
+      case "get_clinvar_data":
+        if (!result.found) return result.message;
+        const significance = result.variants?.[0]?.clinical_significance;
+        return `${result.total_results} variant${
+          result.total_results !== 1 ? "s" : ""
+        } found${significance ? ` • ${significance}` : ""}`;
+      case "genome_browser":
+        return `${result.gene} • ${result.coordinates}`;
+      default:
+        return "Results available";
+    }
+  };
+
   return (
-    <Card className="bg-indigo-50">
-      <CardContent className="p-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="secondary">PubMed Studies</Badge>
-            {result.query && (
-              <span className="text-sm text-gray-600">
-                for <span className="font-medium">"{result.query}"</span>
-              </span>
-            )}
-          </div>
-          {result.studies && result.studies.length > 0 ? (
-            <div className="overflow-x-auto -mx-4 px-4">
-              <div className="flex gap-4 pb-2 min-w-0">
-                {result.studies.map((study: any, index: number) => (
-                  <div
-                    key={index}
-                    className="border border-gray-200 rounded px-3 py-2 bg-white/50 w-[300px] flex-none"
-                  >
-                    <div className="flex flex-col gap-1">
-                      <HoverCard>
-                        <HoverCardTrigger asChild>
-                          <a
-                            href={`https://pubmed.ncbi.nlm.nih.gov/${study.pmid}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-blue-600 hover:underline line-clamp-2 break-words"
-                          >
-                            {study.title}
-                          </a>
-                        </HoverCardTrigger>
-                        <HoverCardContent
-                          side="right"
-                          align="start"
-                          className="w-[400px] max-h-[300px] overflow-hidden"
-                        >
-                          <div className="flex flex-col h-full">
-                            <div className="flex-none p-4 pb-2">
-                              <h4 className="font-semibold text-sm break-words">
-                                {study.title}
-                              </h4>
-                              <div className="flex items-center gap-2 text-xs text-gray-500 mt-1 flex-wrap">
-                                <span className="break-words">
-                                  {study.journal}
-                                </span>
-                                <span>·</span>
-                                <span>{study.year}</span>
-                                <span>·</span>
-                                <span>PMID: {study.pmid}</span>
-                              </div>
-                            </div>
-                            {study.summary && (
-                              <div className="flex-1 overflow-y-auto px-4 pb-4">
-                                <div className="text-sm text-gray-600 leading-relaxed break-words">
-                                  {study.summary}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </HoverCardContent>
-                      </HoverCard>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-                        <span className="break-words">{study.journal}</span>
-                        <span>·</span>
-                        <span>{study.year}</span>
-                        <span>·</span>
-                        <span>PMID: {study.pmid}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-600">No studies found.</p>
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      className="rounded-lg border bg-card text-card-foreground shadow-sm transition hover:shadow-md"
+    >
+      <CollapsibleTrigger className="flex w-full items-center justify-between p-4 font-medium hover:bg-muted/50 transition-colors">
+        <div className="flex items-center gap-4 text-left">
+          <span className="text-sm">{getSummary()}</span>
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform ${
+            isOpen ? "transform rotate-180" : ""
+          }`}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="border-t p-6">
+          {tool === "get_pubmed_studies" && (
+            <PubmedResultContent result={result} />
+          )}
+          {tool === "get_clinvar_data" && (
+            <ClinVarResultContent result={result} />
+          )}
+          {tool === "genome_browser" && (
+            <GenomeBrowserContent result={result} />
           )}
         </div>
-      </CardContent>
-    </Card>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
-const ClinVarResult = ({ result }: { result: any }) => {
-  if (!result.found) {
-    return (
-      <Card className="bg-amber-50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="secondary">ClinVar</Badge>
-            <span className="text-amber-600">{result.message}</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
+const PubmedResultContent = ({ result }: { result: any }) => {
+  if (!result.studies?.length) {
+    return <p className="text-sm text-muted-foreground">No studies found.</p>;
   }
 
   return (
-    <Card className="bg-amber-50">
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Badge variant="secondary">ClinVar</Badge>
-          <span className="text-sm text-gray-600">
-            Found {result.total_results} variant interpretation
-            {result.total_results !== 1 ? "s" : ""}
-          </span>
-        </div>
-        <div className="space-y-4">
-          {result.variants.map((variant: any, index: number) => (
-            <div key={index} className="bg-white rounded-lg p-4 shadow-sm">
-              {/* Header with clinical significance */}
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-medium text-sm">{variant.title}</h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge
-                      variant={
-                        variant.clinical_significance
-                          ?.toLowerCase()
-                          .includes("pathogenic")
-                          ? "destructive"
-                          : variant.clinical_significance
-                              ?.toLowerCase()
-                              .includes("benign")
-                          ? "secondary"
-                          : variant.clinical_significance
-                              ?.toLowerCase()
-                              .includes("uncertain")
-                          ? "outline"
-                          : "default"
-                      }
+    <div className="space-y-6">
+      <div className="grid gap-4">
+        {result.studies.map((study: any, index: number) => (
+          <HoverCard key={index}>
+            <HoverCardTrigger asChild>
+              <a
+                href={`https://pubmed.ncbi.nlm.nih.gov/${study.pmid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block -mx-2 rounded-md p-4 transition-colors hover:bg-muted/50"
+              >
+                <h4 className="font-medium text-base mb-2 leading-tight">
+                  {study.title}
+                </h4>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium">{study.journal}</span>
+                  <span>•</span>
+                  <span>{study.year}</span>
+                  <span>•</span>
+                  <span className="font-mono">PMID: {study.pmid}</span>
+                </div>
+              </a>
+            </HoverCardTrigger>
+            <HoverCardContent
+              side="right"
+              align="start"
+              className="w-[450px] p-6"
+            >
+              <div className="space-y-4">
+                <h4 className="font-medium text-base leading-tight">
+                  {study.title}
+                </h4>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium">{study.journal}</span>
+                  <span>•</span>
+                  <span>{study.year}</span>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {study.summary}
+                </p>
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    asChild
+                  >
+                    <a
+                      href={`https://pubmed.ncbi.nlm.nih.gov/${study.pmid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                     >
-                      {variant.clinical_significance || "No Classification"}
-                    </Badge>
-                    {variant.is_fda_recognized && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-blue-100 text-blue-800"
-                      >
-                        FDA Recognized
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <HoverCard>
-                  <HoverCardTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-xs">
-                      Details
-                    </Button>
-                  </HoverCardTrigger>
-                  <HoverCardContent side="left" className="w-80">
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">Review Status</div>
-                      <div className="text-sm">{variant.review_status}</div>
-                      <div className="text-sm font-medium">Last Evaluated</div>
-                      <div className="text-sm">{variant.last_evaluated}</div>
-                      <div className="text-sm font-medium">
-                        Molecular Consequences
-                      </div>
-                      <div className="text-sm">
-                        {variant.molecular_consequences.join(", ")}
-                      </div>
-                    </div>
-                  </HoverCardContent>
-                </HoverCard>
-              </div>
-
-              {/* Associated conditions */}
-              {variant.associated_conditions?.length > 0 && (
-                <div className="mt-3">
-                  <h5 className="text-sm font-medium text-gray-700 mb-2">
-                    Associated Conditions
-                  </h5>
-                  <div className="flex flex-wrap gap-2">
-                    {variant.associated_conditions.map(
-                      (condition: any, idx: number) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {condition.name}
-                        </Badge>
-                      )
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Population frequencies */}
-              {variant.allele_frequencies?.length > 0 && (
-                <div className="mt-3">
-                  <h5 className="text-sm font-medium text-gray-700 mb-2">
-                    Population Frequencies
-                  </h5>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {variant.allele_frequencies.map(
-                      (freq: any, idx: number) => (
-                        <div key={idx} className="flex justify-between">
-                          <span className="text-gray-600">
-                            {freq.source.split("(")[0].trim()}:
-                          </span>
-                          <span className="font-mono">
-                            {parseFloat(freq.frequency).toExponential(2)}
-                          </span>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Supporting evidence */}
-              <div className="mt-3 text-xs text-gray-500">
-                <div className="flex items-center gap-2">
-                  <span>Evidence:</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger className="text-blue-600 hover:underline">
-                        {variant.supporting_submissions.clinical.length}{" "}
-                        clinical submission
-                        {variant.supporting_submissions.clinical.length !== 1
-                          ? "s"
-                          : ""}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <div className="text-xs">
-                          Clinical Variation IDs:
-                          <div className="font-mono mt-1">
-                            {variant.supporting_submissions.clinical.join(", ")}
-                          </div>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                      View on PubMed
+                    </a>
+                  </Button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+            </HoverCardContent>
+          </HoverCard>
+        ))}
+      </div>
+    </div>
   );
 };
 
-const GenomeBrowserViewer = ({
-  coordinates,
-  gene,
-}: {
-  coordinates: string;
-  gene: string;
-}) => {
-  const [showBrowser, setShowBrowser] = useState(false);
-  const [activeTab, setActiveTab] = useState<"summary" | "browser">("summary");
-  const cleanedCoordinates = coordinates.replace(/,/g, "");
-  const genomeBrowserUrl = `https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=${cleanedCoordinates}`;
+const ClinVarResultContent = ({ result }: { result: any }) => {
+  if (!result.found) {
+    return <p className="text-sm text-muted-foreground">{result.message}</p>;
+  }
 
   return (
-    <Card className="bg-gray-50/50">
-      <CardContent className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">Genomic View</Badge>
-            <span className="text-sm font-medium">{gene}</span>
-          </div>
-          <div className="flex gap-1">
-            <Button
-              variant={activeTab === "summary" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab("summary")}
-              className="text-xs"
-            >
-              Summary
-            </Button>
-            <Button
-              variant={activeTab === "browser" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("browser");
-                setShowBrowser(true);
-              }}
-              className="text-xs"
-            >
-              Browser
-            </Button>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <div className="grid gap-6">
+        {result.variants.map((variant: any, index: number) => (
+          <div key={index} className="space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-medium text-base mb-2">{variant.title}</h4>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={
+                      variant.clinical_significance
+                        ?.toLowerCase()
+                        .includes("pathogenic")
+                        ? "destructive"
+                        : variant.clinical_significance
+                            ?.toLowerCase()
+                            .includes("benign")
+                        ? "secondary"
+                        : "outline"
+                    }
+                    className="rounded-md px-2.5 py-0.5 font-medium"
+                  >
+                    {variant.clinical_significance || "No Classification"}
+                  </Badge>
+                  {variant.is_fda_recognized && (
+                    <Badge
+                      variant="secondary"
+                      className="rounded-md px-2.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200"
+                    >
+                      FDA Recognized
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 rounded-md"
+                  >
+                    Details
+                  </Button>
+                </HoverCardTrigger>
+                <HoverCardContent side="left" className="w-96 p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <div className="font-medium text-sm mb-1">
+                        Review Status
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {variant.review_status}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-sm mb-1">
+                        Last Evaluated
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {variant.last_evaluated}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-sm mb-1">
+                        Molecular Consequences
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {variant.molecular_consequences.join(", ")}
+                      </div>
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            </div>
 
-        {activeTab === "summary" ? (
-          <div className="space-y-1">
-            <div className="flex items-center text-sm">
-              <span className="text-gray-500 w-24">Coordinates:</span>
-              <span className="font-mono text-xs">{coordinates}</span>
+            {variant.associated_conditions?.length > 0 && (
+              <div className="space-y-2 bg-muted/40 rounded-lg p-4">
+                <div className="text-sm font-medium">Associated Conditions</div>
+                <div className="flex flex-wrap gap-2">
+                  {variant.associated_conditions.map(
+                    (condition: any, idx: number) => (
+                      <Badge
+                        key={idx}
+                        variant="outline"
+                        className="rounded-md px-2.5 py-0.5 text-xs bg-background"
+                      >
+                        {condition.name}
+                      </Badge>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {variant.allele_frequencies?.length > 0 && (
+              <div className="space-y-2 bg-muted/40 rounded-lg p-4">
+                <div className="text-sm font-medium">
+                  Population Frequencies
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {variant.allele_frequencies.map((freq: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex justify-between items-center"
+                    >
+                      <span className="text-muted-foreground">
+                        {freq.source.split("(")[0].trim()}
+                      </span>
+                      <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                        {parseFloat(freq.frequency).toExponential(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Evidence:</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger className="text-primary font-medium hover:underline">
+                    {variant.supporting_submissions.clinical.length} clinical
+                    submission
+                    {variant.supporting_submissions.clinical.length !== 1
+                      ? "s"
+                      : ""}
+                  </TooltipTrigger>
+                  <TooltipContent className="p-4">
+                    <div className="space-y-2">
+                      <div className="font-medium">Clinical Variation IDs</div>
+                      <div className="font-mono text-xs bg-muted p-2 rounded">
+                        {variant.supporting_submissions.clinical.join(", ")}
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
-        ) : (
-          showBrowser && (
-            <div className="mt-2">
-              <iframe
-                src={genomeBrowserUrl}
-                width="100%"
-                height="400px"
-                style={{ border: "none" }}
-                title="UCSC Genome Browser"
-              />
-            </div>
-          )
-        )}
-      </CardContent>
-    </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const GenomeBrowserContent = ({ result }: { result: any }) => {
+  const [showBrowser, setShowBrowser] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowBrowser(!showBrowser)}
+          className="h-8 px-3 rounded-md"
+        >
+          {showBrowser ? "Hide Browser" : "Show Browser"}
+        </Button>
+      </div>
+
+      {showBrowser && (
+        <div className="rounded-lg overflow-hidden border shadow-sm">
+          <iframe
+            src={`https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=${result.coordinates.replace(
+              /,/g,
+              ""
+            )}`}
+            width="100%"
+            height="500"
+            style={{ border: "none" }}
+            title="UCSC Genome Browser"
+          />
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -440,20 +450,44 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `/api/py/chat?message=${encodeURIComponent(message)}`
-      );
-      const data = await response.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
+      const response = await fetch(
+        `/api/py/chat?message=${encodeURIComponent(message)}`,
+        {
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
       setConversation((prev) => [...prev, ...data.conversation.slice(1)]);
     } catch (error) {
       console.error("Error:", error);
+      let errorMessage = "Sorry, there was an error processing your request.";
+
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          errorMessage =
+            "The request took too long to complete. Please try again.";
+        } else if (error.message.includes("fetch")) {
+          errorMessage =
+            "Network error. Please check your connection and try again.";
+        }
+      }
+
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
           type: "message",
-          content: "Sorry, there was an error processing your request.",
+          content: errorMessage,
         },
       ]);
     }
@@ -466,34 +500,33 @@ export default function Home() {
       case "message":
         return (
           <div
-            className={`mb-4 flex items-start gap-3 ${
-              msg.role === "user" ? "flex-row-reverse" : "flex-row"
+            className={`group flex items-start gap-3 ${
+              msg.role === "user" ? "justify-end" : ""
             }`}
           >
-            <Avatar
-              className={msg.role === "user" ? "bg-blue-500" : "bg-gray-200"}
-            >
-              <AvatarFallback>
-                {msg.role === "user" ? "U" : "AI"}
-              </AvatarFallback>
-            </Avatar>
-            <Card
-              className={`max-w-[80%] ${
-                msg.role === "user" ? "bg-blue-500 text-white" : "bg-gray-100"
+            {msg.role !== "user" && (
+              <Avatar className="flex-none mt-0.5">
+                <AvatarFallback>AI</AvatarFallback>
+              </Avatar>
+            )}
+            <div
+              className={`flex-1 max-w-3xl overflow-hidden ${
+                msg.role === "user" ? "text-right" : ""
               }`}
             >
-              <CardContent
-                className={`p-3 ${
+              <div
+                className={`inline-block px-3 py-2 rounded-lg ${
                   msg.role === "user"
-                    ? "break-words overflow-wrap-anywhere"
-                    : "prose prose-sm dark:prose-invert max-w-none break-words overflow-wrap-anywhere"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
                 }`}
               >
                 {msg.role === "user" ? (
-                  msg.content
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                 ) : (
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
+                    className="text-left"
                     components={
                       {
                         a: ({
@@ -560,93 +593,69 @@ export default function Home() {
                               className="block bg-gray-200 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto"
                             />
                           ),
-                      } satisfies Components
+                      } as Components
                     }
                   >
                     {msg.content}
                   </ReactMarkdown>
                 )}
-              </CardContent>
-            </Card>
-          </div>
-        );
-
-      case "tool_result": {
-        if (msg.tool === "get_pubmed_studies") {
-          const toolUseMsg = conversation.find(
-            (m) => m.type === "tool_use" && m.id === msg.id
-          );
-          const query = toolUseMsg?.arguments?.query;
-          return (
-            <div className="mb-4 ml-8">
-              <PubmedResult result={{ ...msg.result, query }} />
-            </div>
-          );
-        }
-        if (msg.tool === "genome_browser") {
-          const toolUseMsg = conversation.find(
-            (m) => m.type === "tool_use" && m.id === msg.id
-          );
-          if (toolUseMsg?.arguments && msg.result) {
-            return (
-              <div className="mb-4 ml-8">
-                <GenomeBrowserViewer
-                  coordinates={msg.result.coordinates}
-                  gene={msg.result.gene}
-                />
               </div>
-            );
-          }
-        }
-        if (msg.tool === "get_clinvar_data") {
-          return (
-            <div className="mb-4 ml-8">
-              <ClinVarResult result={msg.result} />
             </div>
-          );
-        }
-        return (
-          <div className="mb-4 ml-8">
-            {msg.tool === "get_weather" ? (
-              <WeatherResult result={msg.result} />
-            ) : msg.tool === "get_time" ? (
-              <TimeResult result={msg.result} />
-            ) : msg.tool === "google_search" ? (
-              <SearchResult result={msg.result} />
-            ) : msg.tool === "read_website" ? (
-              <WebsiteResult result={msg.result} />
-            ) : (
-              <Card>
-                <CardContent className="p-2">
-                  <pre className="bg-gray-50 rounded overflow-x-auto whitespace-pre-wrap break-words">
-                    {JSON.stringify(msg.result, null, 2)}
-                  </pre>
-                </CardContent>
-              </Card>
+            {msg.role === "user" && (
+              <Avatar className="flex-none mt-0.5">
+                <AvatarFallback>U</AvatarFallback>
+              </Avatar>
             )}
           </div>
         );
-      }
+
+      case "tool_result":
+        console.log(msg);
+        return (
+          <div className="flex items-start gap-3">
+            <div className="flex-none mt-0.5 w-9 h-9 rounded-full bg-muted/50 flex items-center justify-center">
+              <span className="text-base" aria-hidden="true">
+                {msg.tool === "get_pubmed_studies"
+                  ? "📚"
+                  : msg.tool === "get_clinvar_data"
+                  ? "🧬"
+                  : msg.tool === "genome_browser"
+                  ? "🔬"
+                  : "🔍"}
+              </span>
+            </div>
+            <div className="flex-1 max-w-3xl">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {msg.tool === "get_pubmed_studies"
+                    ? "Literature"
+                    : msg.tool === "get_clinvar_data"
+                    ? "Variant"
+                    : msg.tool === "genome_browser"
+                    ? "Genomic View"
+                    : "Results"}
+                </div>
+                <div className="text-[10px] text-muted-foreground/50">
+                  {msg.tool === "get_pubmed_studies"
+                    ? `Search: "${
+                        msg.arguments?.query ||
+                        msg.result?.query ||
+                        "unknown query"
+                      }"`
+                    : msg.tool === "get_clinvar_data"
+                    ? `Variant: ${msg.arguments?.gene} ${msg.arguments?.variant}`
+                    : msg.tool === "genome_browser"
+                    ? `Gene: ${msg.arguments?.gene}`
+                    : ""}
+                </div>
+              </div>
+              <ToolResult result={msg.result} tool={msg.tool || ""} />
+            </div>
+          </div>
+        );
 
       case "tool_use":
-        return (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="mb-2 ml-4">
-                  <Badge variant="outline" className="text-gray-500">
-                    Using {msg.tool}
-                  </Badge>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <pre className="text-xs">
-                  {JSON.stringify(msg.arguments, null, 2)}
-                </pre>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
+        return null;
 
       default:
         return null;
@@ -654,103 +663,101 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col">
-      <Card className="flex-1 rounded-none border-0">
-        <CardHeader className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <h2 className="text-2xl font-bold text-center">AI Assistant</h2>
-        </CardHeader>
-        <CardContent className="flex flex-col p-4 pt-6 h-[calc(100vh-8rem)]">
-          <ScrollArea className="flex-1 pr-4 !block overflow-x-hidden">
-            <div className="space-y-4 overflow-x-hidden">
-              {conversation.map((msg, index) => (
-                <>
-                  <div key={index}>{renderMessage(msg, index)}</div>
-                  {index < conversation.length - 1 && (
-                    <Separator className="my-4" />
-                  )}
-                </>
-              ))}
-              {isLoading && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <Skeleton className="h-12 w-12 rounded-full" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-[250px]" />
-                      <Skeleton className="h-4 w-[200px]" />
-                    </div>
-                  </div>
+    <main className="flex h-screen flex-col">
+      <header className="flex-none border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 max-w-screen-2xl items-center">
+          <h1 className="text-lg font-semibold">AI Assistant</h1>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full px-4">
+          <div className="container max-w-screen-2xl py-6 space-y-6">
+            {conversation.map((msg, index) => (
+              <div key={index}>{renderMessage(msg, index)}</div>
+            ))}
+            {isLoading && (
+              <div className="flex items-start gap-3">
+                <Avatar className="flex-none mt-0.5">
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+                <div className="space-y-2.5">
+                  <Skeleton className="h-4 w-[250px]" />
+                  <Skeleton className="h-4 w-[200px]" />
                 </div>
-              )}
-            </div>
-          </ScrollArea>
-          <Separator className="my-4" />
-          <div className="pt-2">
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <Input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Ask about weather or time..."
-                disabled={isLoading}
-                className="flex-1"
-              />
-              <Button type="submit" disabled={isLoading}>
-                Send
-              </Button>
-            </form>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setMessage(
-                    "My patient has a VUS in PALB2 (c.1240G>T). Can you help me understand its potential impact on breast cancer risk and find recent publications about this variant?"
-                  )
-                }
-                className="text-xs"
-              >
-                Analyze PALB2 VUS
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setMessage(
-                    "What are the latest clinical trials and research findings on germline PTEN mutations in Cowden syndrome? Particularly interested in cancer surveillance guidelines."
-                  )
-                }
-                className="text-xs"
-              >
-                PTEN & Cowden Research
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setMessage(
-                    "Can you show me the genomic region around the MLH1 gene exon 16? I need to check for common Lynch syndrome variants and nearby splice sites."
-                  )
-                }
-                className="text-xs"
-              >
-                View MLH1 Region
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setMessage(
-                    "What's the current evidence for reclassifying CDH1 c.1137G>A as pathogenic? Please include recent case studies and functional studies."
-                  )
-                }
-                className="text-xs"
-              >
-                CDH1 Classification
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </ScrollArea>
+      </div>
+
+      <footer className="flex-none border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container max-w-screen-2xl py-4">
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <Input
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Ask a question..."
+              disabled={isLoading}
+              className="flex-1"
+            />
+            <Button type="submit" disabled={isLoading}>
+              Send
+            </Button>
+          </form>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setMessage(
+                  "My patient has a VUS in PALB2 (c.1240G>T). Can you help me understand its potential impact on breast cancer risk and find recent publications about this variant?"
+                )
+              }
+              className="text-xs"
+            >
+              Analyze PALB2 VUS
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setMessage(
+                  "What are the latest clinical trials and research findings on germline PTEN mutations in Cowden syndrome? Particularly interested in cancer surveillance guidelines."
+                )
+              }
+              className="text-xs"
+            >
+              PTEN & Cowden Research
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setMessage(
+                  "Can you show me the genomic region around the MLH1 gene exon 16? I need to check for common Lynch syndrome variants and nearby splice sites."
+                )
+              }
+              className="text-xs"
+            >
+              View MLH1 Region
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setMessage(
+                  "What's the current evidence for reclassifying CDH1 c.1137G>A as pathogenic? Please include recent case studies and functional studies."
+                )
+              }
+              className="text-xs"
+            >
+              CDH1 Classification
+            </Button>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

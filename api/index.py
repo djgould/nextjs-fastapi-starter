@@ -6,6 +6,7 @@ import anthropic
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from firecrawl import FirecrawlApp
 import logging
 import xml.etree.ElementTree as ElementTree
@@ -19,6 +20,20 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Request timeout settings
+REQUEST_TIMEOUT = 60  # seconds
+
+# Configure requests session with retries and longer timeouts
+session = requests.Session()
+retries = Retry(
+    total=3,
+    backoff_factor=0.5,
+    status_forcelist=[500, 502, 503, 504]
+)
+adapter = HTTPAdapter(max_retries=retries, pool_connections=20, pool_maxsize=20)
+session.mount('http://', adapter)
+session.mount('https://', adapter)
+
 # NCBI API settings
 NCBI_PARAMS = {k: v for k, v in {
     "api_key": os.getenv("NCBI_API_KEY"),
@@ -27,7 +42,10 @@ NCBI_PARAMS = {k: v for k, v in {
 }.items() if v is not None}
 
 # Create FastAPI instance with custom docs and openapi url
-app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
+app = FastAPI(
+    docs_url="/api/py/docs", 
+    openapi_url="/api/py/openapi.json"
+)
 
 
 class WeatherRequest(BaseModel):
@@ -54,7 +72,7 @@ def get_weather_data(lat: float, lon: float, unit: str = "celsius") -> dict:
         "timeformat": "unixtime"
     }
     
-    response = requests.get(weather_url, params=weather_params)
+    response = session.get(weather_url, params=weather_params, timeout=REQUEST_TIMEOUT)
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code,
                           detail="Weather data not available")
@@ -109,7 +127,7 @@ def google_search(query: str) -> dict:
         "num": 5  # Number of results to return
     }
     
-    response = requests.get(url, params=params)
+    response = session.get(url, params=params, timeout=REQUEST_TIMEOUT)
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code,
                           detail="Google search failed")
@@ -174,7 +192,7 @@ def get_pubmed_studies(query: str, max_results: int = 5) -> dict:
         **NCBI_PARAMS
     }
     
-    esearch_resp = requests.get(esearch_url, params=params)
+    esearch_resp = session.get(esearch_url, params=params, timeout=REQUEST_TIMEOUT)
     if esearch_resp.status_code != 200:
         raise HTTPException(
             status_code=esearch_resp.status_code,
@@ -185,7 +203,12 @@ def get_pubmed_studies(query: str, max_results: int = 5) -> dict:
         search_data = esearch_resp.json()
         ids = search_data.get("esearchresult", {}).get("idlist", [])
         if not ids:
-            return {"studies": [], "total_count": 0}
+            return {
+                "studies": [],
+                "total_count": 0,
+                "showing": 0,
+                "query": query
+            }
 
         # Get the total count of results (even if we're only fetching a subset)
         total_count = int(search_data.get("esearchresult", {}).get("count", "0"))
@@ -199,7 +222,7 @@ def get_pubmed_studies(query: str, max_results: int = 5) -> dict:
             **NCBI_PARAMS
         }
         
-        fetch_resp = requests.get(efetch_url, params=fetch_params)
+        fetch_resp = session.get(efetch_url, params=fetch_params, timeout=REQUEST_TIMEOUT)
         if fetch_resp.status_code != 200:
             raise HTTPException(
                 status_code=fetch_resp.status_code,
@@ -244,7 +267,8 @@ def get_pubmed_studies(query: str, max_results: int = 5) -> dict:
         return {
             "studies": studies,
             "total_count": total_count,
-            "showing": len(studies)
+            "showing": len(studies),
+            "query": query
         }
         
     except ElementTree.ParseError as e:
@@ -273,7 +297,7 @@ def get_genome_browser_data(gene: str) -> dict:
     }
     
     logger.info(f"Searching NCBI Gene with params: {params}")
-    response = requests.get(esearch_url, params=params)
+    response = session.get(esearch_url, params=params, timeout=REQUEST_TIMEOUT)
     if response.status_code != 200:
         logger.error(f"NCBI Gene search failed with status {response.status_code}: {response.text}")
         raise HTTPException(
@@ -298,7 +322,7 @@ def get_genome_browser_data(gene: str) -> dict:
     }
     
     logger.info(f"Fetching gene details with params: {params}")
-    response = requests.get(efetch_url, params=params)
+    response = session.get(efetch_url, params=params, timeout=REQUEST_TIMEOUT)
     if response.status_code != 200:
         logger.error(f"NCBI Gene fetch failed with status {response.status_code}: {response.text}")
         raise HTTPException(
@@ -424,7 +448,7 @@ def get_clinvar_data(gene: str, variant: str) -> dict:
         **NCBI_PARAMS
     }
     
-    response = requests.get(esearch_url, params=search_params)
+    response = session.get(esearch_url, params=search_params, timeout=REQUEST_TIMEOUT)
     if response.status_code != 200:
         raise HTTPException(
             status_code=response.status_code,
@@ -449,7 +473,7 @@ def get_clinvar_data(gene: str, variant: str) -> dict:
             **NCBI_PARAMS
         }
         
-        summary_resp = requests.get(esummary_url, params=summary_params)
+        summary_resp = session.get(esummary_url, params=summary_params, timeout=REQUEST_TIMEOUT)
         if summary_resp.status_code != 200:
             raise HTTPException(
                 status_code=summary_resp.status_code,
@@ -544,7 +568,13 @@ def chat(message: str):
     logger.info(f"Received chat message: {message}")
     
     client = anthropic.Anthropic(
-        api_key=os.getenv("ANTHROPIC_API_KEY")
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        max_retries=3,  # Increased retries
+        timeout=REQUEST_TIMEOUT,  # Set timeout for Anthropic API calls
+        base_url="https://api.anthropic.com",  # Explicitly set base URL
+        default_headers={
+            "Keep-Alive": "timeout=60, max=1000"  # Add keep-alive header
+        }
     )
     
     tools = [
