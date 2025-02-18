@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -71,7 +72,9 @@ const SearchResult = ({ result }: { result: any }) => (
     <CardContent className="p-4">
       <div className="flex items-center gap-2 mb-2">
         <Badge variant="secondary">Search</Badge>
-        <span className="text-sm text-gray-600">"{result.query}"</span>
+        <span className="text-sm text-gray-600">
+          &quot;{result.query}&quot;
+        </span>
       </div>
       <div className="space-y-4">
         {result.results.map((item: any, index: number) => (
@@ -125,7 +128,8 @@ const PubmedResult = ({ result }: { result: any }) => {
             <Badge variant="secondary">PubMed Studies</Badge>
             {result.query && (
               <span className="text-sm text-gray-600">
-                for <span className="font-medium">"{result.query}"</span>
+                for{" "}
+                <span className="font-medium">&quot;{result.query}&quot;</span>
               </span>
             )}
           </div>

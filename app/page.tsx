@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -130,7 +131,7 @@ const ToolResult = ({ result, tool }: { result: any; tool: string }) => {
       case "get_pubmed_studies":
         return result.studies?.length
           ? `${result.studies.length} studies found${
-              result.query ? ` for "${result.query}"` : ""
+              result.query ? ` for &quot;${result.query}&quot;` : ""
             }`
           : "No studies found";
       case "get_clinvar_data":
