@@ -1,5 +1,4 @@
 """FastAPI router module for handling Python API endpoints."""
-import os
 from datetime import datetime
 import json
 import pytz
@@ -9,13 +8,23 @@ from pydantic import BaseModel
 import requests
 from firecrawl import FirecrawlApp
 import logging
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ElementTree
+from dotenv import load_dotenv
+import os
 
+# Load environment variables
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# NCBI API settings
+NCBI_PARAMS = {
+    "api_key": os.getenv("NCBI_API_KEY"),
+    "tool": os.getenv("NCBI_TOOL_NAME", "genomics-assistant"),
+    "email": os.getenv("NCBI_EMAIL")
+}
 
 # Create FastAPI instance with custom docs and openapi url
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
@@ -83,12 +92,14 @@ def get_time_data(timezone: str) -> dict:
 
 def google_search(query: str) -> dict:
     """Perform a Google search using Custom Search API."""
-    api_key = ""
-    cx = ""  # Search Engine ID
+    api_key = os.getenv("GOOGLE_API_KEY")
+    cx = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
     
     if not api_key or not cx:
-        raise HTTPException(status_code=500, 
-                          detail="Google Search API not configured")
+        raise HTTPException(
+            status_code=500,
+            detail="Google Search API not configured"
+        )
     
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
@@ -121,7 +132,7 @@ def google_search(query: str) -> dict:
 
 def read_website(url: str) -> dict:
     """Read a website using Firecrawl."""
-    api_key = ""
+    api_key = os.getenv("FIRECRAWL_API_KEY")
     
     app = FirecrawlApp(api_key=api_key)
     
@@ -150,15 +161,22 @@ def get_pubmed_studies(query: str) -> dict:
     params = {
         "db": "pubmed",
         "term": query,
-        "retmax": "5"
+        "retmax": "5",
+        **NCBI_PARAMS
     }
     esearch_resp = requests.get(esearch_url, params=params)
     if esearch_resp.status_code != 200:
-        raise HTTPException(status_code=esearch_resp.status_code, detail="PubMed esearch failed")
+        raise HTTPException(
+            status_code=esearch_resp.status_code,
+            detail="PubMed esearch failed"
+        )
     try:
-        root = ET.fromstring(esearch_resp.text)
-    except ET.ParseError:
-        raise HTTPException(status_code=500, detail="Failed to parse PubMed esearch XML")
+        root = ElementTree.fromstring(esearch_resp.text)
+    except ElementTree.ParseError:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to parse PubMed esearch XML"
+        )
     ids = [elem.text for elem in root.findall(".//Id") if elem.text]
     if not ids:
         return {"studies": []}
@@ -174,8 +192,8 @@ def get_pubmed_studies(query: str) -> dict:
     if fetch_resp.status_code != 200:
         raise HTTPException(status_code=fetch_resp.status_code, detail="PubMed efetch failed")
     try:
-        fetch_root = ET.fromstring(fetch_resp.text)
-    except ET.ParseError:
+        fetch_root = ElementTree.fromstring(fetch_resp.text)
+    except ElementTree.ParseError:
         raise HTTPException(status_code=500, detail="Failed to parse PubMed efetch XML")
 
     studies = []
@@ -199,12 +217,132 @@ def get_pubmed_studies(query: str) -> dict:
     return {"studies": studies}
 
 
+def get_genome_browser_data(gene: str, variant: str = None) -> dict:
+    """Get genomic coordinates and variant information for a gene from NCBI and ClinVar."""
+    # First get gene info from NCBI
+    esearch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+    params = {
+        "db": "gene",
+        "term": f"{gene}[Gene Name] AND human[Organism]",
+        "retmode": "json",
+        **NCBI_PARAMS
+    }
+    
+    response = requests.get(esearch_url, params=params)
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail="Failed to fetch gene data from NCBI"
+        )
+    
+    data = response.json()
+    gene_ids = data.get("esearchresult", {}).get("idlist", [])
+    
+    if not gene_ids:
+        raise HTTPException(status_code=404, detail=f"Gene {gene} not found in NCBI database")
+    
+    # Get detailed gene info
+    efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+    params = {
+        "db": "gene",
+        "id": gene_ids[0],
+        "retmode": "xml"
+    }
+    
+    response = requests.get(efetch_url, params=params)
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail="Failed to fetch gene details from NCBI"
+        )
+    
+    try:
+        root = ElementTree.fromstring(response.text)
+        gene_loc = root.find(".//Entrezgene_location")
+        if gene_loc is None:
+            raise HTTPException(status_code=404, detail=f"No location data found for gene {gene}")
+        
+        # Extract chromosome
+        chr_node = gene_loc.find(".//Gene-commentary_label")
+        chromosome = chr_node.text if chr_node is not None else None
+        
+        # Extract coordinates
+        seq_locs = gene_loc.findall(".//Seq-interval")
+        if seq_locs:
+            seq_loc = seq_locs[0]  # Use first interval
+            start = seq_loc.find(".//Seq-interval_from").text
+            end = seq_loc.find(".//Seq-interval_to").text
+            coordinates = f"chr{chromosome}:{start}-{end}"
+        else:
+            raise HTTPException(status_code=404, detail=f"No coordinate data found for gene {gene}")
+        
+        # If variant is provided, fetch from ClinVar
+        variants = []
+        if variant:
+            # Search ClinVar for the variant
+            clinvar_search_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+            clinvar_params = {
+                "db": "clinvar",
+                "term": f"{gene}[Gene] AND {variant}[Variant]",
+                "retmode": "json"
+            }
+            
+            clinvar_response = requests.get(clinvar_search_url, params=clinvar_params)
+            if clinvar_response.status_code == 200:
+                clinvar_data = clinvar_response.json()
+                clinvar_ids = clinvar_data.get("esearchresult", {}).get("idlist", [])
+                
+                if clinvar_ids:
+                    # Get variant details
+                    clinvar_fetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                    clinvar_fetch_params = {
+                        "db": "clinvar",
+                        "id": clinvar_ids[0],
+                        "rettype": "variation",
+                        "retmode": "xml"
+                    }
+                    
+                    clinvar_fetch_response = requests.get(clinvar_fetch_url, params=clinvar_fetch_params)
+                    if clinvar_fetch_response.status_code == 200:
+                        clinvar_root = ElementTree.fromstring(clinvar_fetch_response.text)
+                        # Extract variant position and allele
+                        var_loc = clinvar_root.find(".//SequenceLocation[@Assembly='GRCh38']")
+                        if var_loc is not None:
+                            position = var_loc.get("start")
+                            ref_allele = var_loc.get("referenceAllele", "")
+                            alt_allele = var_loc.get("alternateAllele", "")
+                            variants.append({
+                                "position": int(position),
+                                "allele": f"{ref_allele}>{alt_allele}" if ref_allele and alt_allele else variant
+                            })
+        
+        return {
+            "coordinates": coordinates,
+            "gene": gene,
+            "variants": variants
+        }
+        
+    except ElementTree.ParseError:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to parse gene data from NCBI"
+        )
+    except Exception as e:
+        logger.error(f"Error processing gene data: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing gene data: {str(e)}"
+        )
+
+
 @app.get('/api/py/chat')
 def chat(message: str):
     """Handle chat requests with tool usage."""
     logger.info(f"Received chat message: {message}")
     
-    client = anthropic.Anthropic(api_key="")
+    client = anthropic.Anthropic(
+        api_key=os.getenv("ANTHROPIC_API_KEY")
+    )
     
     tools = [
         {
@@ -282,6 +420,24 @@ def chat(message: str):
                 },
                 "required": ["url"]
             }
+        },
+        {
+            "name": "genome_browser",
+            "description": "Get genomic coordinates and variant information for a gene to display in the UCSC Genome Browser",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "gene": {
+                        "type": "string",
+                        "description": "The gene symbol (e.g., BRCA1, BRCA2)"
+                    },
+                    "variant": {
+                        "type": "string",
+                        "description": "Optional variant in HGVS notation (e.g., c.68_69delAG)"
+                    }
+                },
+                "required": ["gene"]
+            }
         }
     ]
 
@@ -337,6 +493,11 @@ def chat(message: str):
                         result = get_pubmed_studies(query=arguments["query"])
                     elif tool_name == "read_website":
                         result = read_website(url=arguments["url"])
+                    elif tool_name == "genome_browser":
+                        result = get_genome_browser_data(
+                            gene=arguments["gene"],
+                            variant=arguments.get("variant")
+                        )
                         
                     logger.info(f"Tool result: {str(result)[:200]}...")
                 except Exception as e:

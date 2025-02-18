@@ -1,2 +1,7 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+fastapi==0.109.2
+uvicorn==0.27.1
+anthropic==0.18.1
+pytz==2024.1
+requests==2.31.0
+firecrawl==0.1.0
+python-dotenv==1.0.1

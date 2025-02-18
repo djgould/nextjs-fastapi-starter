@@ -200,6 +200,91 @@ const PubmedResult = ({ result }: { result: any }) => {
   );
 };
 
+const GenomeBrowserViewer = ({
+  coordinates,
+  gene,
+  variants,
+}: {
+  coordinates: string;
+  gene: string;
+  variants: { position: number; allele: string }[];
+}) => {
+  const [showBrowser, setShowBrowser] = useState(false);
+  const [activeTab, setActiveTab] = useState<"summary" | "browser">("summary");
+  const cleanedCoordinates = coordinates.replace(/,/g, "");
+  const genomeBrowserUrl = `https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=${cleanedCoordinates}`;
+
+  return (
+    <Card className="bg-gray-50/50">
+      <CardContent className="p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">Genomic View</Badge>
+            <span className="text-sm font-medium">{gene}</span>
+          </div>
+          <div className="flex gap-1">
+            <Button
+              variant={activeTab === "summary" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("summary")}
+              className="text-xs"
+            >
+              Summary
+            </Button>
+            <Button
+              variant={activeTab === "browser" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => {
+                setActiveTab("browser");
+                setShowBrowser(true);
+              }}
+              className="text-xs"
+            >
+              Browser
+            </Button>
+          </div>
+        </div>
+
+        {activeTab === "summary" ? (
+          <div className="space-y-1">
+            <div className="flex items-center text-sm">
+              <span className="text-gray-500 w-24">Coordinates:</span>
+              <span className="font-mono text-xs">{coordinates}</span>
+            </div>
+            <div className="flex items-start text-sm">
+              <span className="text-gray-500 w-24">Variants:</span>
+              <div className="flex-1">
+                {variants.map((variant, idx) => (
+                  <div
+                    key={idx}
+                    className="font-mono text-xs flex items-center gap-2"
+                  >
+                    <span>pos: {variant.position}</span>
+                    <span>·</span>
+                    <span>{variant.allele}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          showBrowser && (
+            <div className="mt-2">
+              <iframe
+                src={genomeBrowserUrl}
+                width="100%"
+                height="400px"
+                style={{ border: "none" }}
+                title="UCSC Genome Browser"
+              />
+            </div>
+          )
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 export default function Home() {
   const [message, setMessage] = useState("");
   const [conversation, setConversation] = useState<Message[]>([]);
@@ -356,6 +441,22 @@ export default function Home() {
               <PubmedResult result={{ ...msg.result, query }} />
             </div>
           );
+        }
+        if (msg.tool === "genome_browser") {
+          const toolUseMsg = conversation.find(
+            (m) => m.type === "tool_use" && m.id === msg.id
+          );
+          if (toolUseMsg?.arguments && msg.result) {
+            return (
+              <div className="mb-4 ml-8">
+                <GenomeBrowserViewer
+                  coordinates={msg.result.coordinates}
+                  gene={msg.result.gene}
+                  variants={msg.result.variants}
+                />
+              </div>
+            );
+          }
         }
         return (
           <div className="mb-4 ml-8">
