@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  functions: {
+    maxDuration: 60, // This sets the timeout to 60 seconds
+  },
   rewrites: async () => {
     return [
       {
